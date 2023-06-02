@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPublicToken } = require('../services/aps.js');
+const { getPublicToken } = require('../services/apsApisWrapper.js');
 
 let router = express.Router();
 

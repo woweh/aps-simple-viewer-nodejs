@@ -1,12 +1,14 @@
 import { initViewer, loadModel } from './viewer.js';
 
 initViewer(document.getElementById('preview')).then(viewer => {
+    console.log('Viewer initialized');
     const urn = window.location.hash?.substring(1);
     setupModelSelection(viewer, urn);
     setupModelUpload(viewer);
 });
 
 async function setupModelSelection(viewer, selectedUrn) {
+    console.log('Setting up model selection');
     const dropdown = document.getElementById('models');
     dropdown.innerHTML = '';
     try {
@@ -27,9 +29,12 @@ async function setupModelSelection(viewer, selectedUrn) {
 }
 
 async function setupModelUpload(viewer) {
+    console.log('Setting up model upload');
     const upload = document.getElementById('upload');
     const input = document.getElementById('input');
     const models = document.getElementById('models');
+    const download = document.getElementById('download');
+
     upload.onclick = () => input.click();
     input.onchange = async () => {
         const file = input.files[0];
@@ -39,29 +44,38 @@ async function setupModelUpload(viewer) {
             const entrypoint = window.prompt('Please enter the filename of the main design inside the archive.');
             data.append('model-zip-entrypoint', entrypoint);
         }
+
         upload.setAttribute('disabled', 'true');
         models.setAttribute('disabled', 'true');
+        download.setAttribute('disabled', 'true');
         showNotification(`Uploading model <em>${file.name}</em>. Do not reload the page.`);
+
         try {
             const resp = await fetch('/api/models', { method: 'POST', body: data });
             if (!resp.ok) {
                 throw new Error(await resp.text());
             }
+
             const model = await resp.json();
+            showNotification(`Finished uploading the model.\nModel urn: <em>${model.urn}</em>`);
             setupModelSelection(viewer, model.urn);
+
         } catch (err) {
             alert(`Could not upload model ${file.name}. See the console for more details.`);
             console.error(err);
+
         } finally {
             clearNotification();
             upload.removeAttribute('disabled');
             models.removeAttribute('disabled');
+            download.removeAttribute('disabled');
             input.value = '';
         }
     };
 }
 
 async function onModelSelected(viewer, urn) {
+    console.log(`Selected model ${urn}`);
     if (window.onModelSelectedTimeout) {
         clearTimeout(window.onModelSelectedTimeout);
         delete window.onModelSelectedTimeout;
@@ -87,7 +101,7 @@ async function onModelSelected(viewer, urn) {
             default:
                 clearNotification();
                 loadModel(viewer, urn);
-                break; 
+                break;
         }
     } catch (err) {
         alert('Could not load model. See the console for more details.');
