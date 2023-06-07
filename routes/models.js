@@ -1,6 +1,6 @@
 const express = require('express');
 const formidable = require('express-formidable');
-const { listObjects, uploadObject, translateObject, getManifest, urnify } = require('../services/apsApisWrapper.js');
+const { listObjects, uploadObject, translateObject, getManifest, getDerivativeUrn, downloadDerivative, urnify } = require('../services/apsApisWrapper.js');
 const path = require('path');
 const fs = require('fs');
 
@@ -48,6 +48,11 @@ router.get(`${modelsEndpoint}/:urn/status`, async function (req, res, next) {
                     }
                 }
             }
+            let parsedManifest = parseManifest(manifest);
+            if (parsedManifest?.propertiesUrn) {
+                const derivativeUrn = await getDerivativeUrn(req.params.urn, parsedManifest.propertiesUrn);
+                console.log("Derivative urn: ", derivativeUrn);
+            }
             res.json({ status: manifest.status, progress: manifest.progress, messages });
         } else {
             res.json({ status: 'n/a' });
@@ -84,8 +89,11 @@ router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) 
         const sqLitePath = path.join(resultDir, 'properties.sqlite');
         const propertiesPath = path.join(resultDir, 'properties.json');
 
+        let worked = await downloadDerivative(req.params.urn, parsedManifest.sqLiteUrn, sqLitePath);
+        console.log("worked: ", worked);
 
-
+        worked = worked && await downloadDerivative(req.params.urn, parsedManifest.propertiesUrn, propertiesPath);
+        console.log("worked: ", worked);
 
     } catch (err) {
         console.log(err);
@@ -107,20 +115,15 @@ function parseManifest(manifest) {
             return Error('manifest has no derivatives');
         }
         for (const derivative of manifest.derivatives) {
-            if (!derivative.outputType?.includes('svf') ||
-                derivative.progress != 'complete' ||
-                !derivative.status != 'success' ||
-                !derivative.children) {
+            if (!derivativeIsOk(derivative)) {
                 continue;
             }
             cadFileName = derivative.name;
             for (const child of derivative.children) {
-                if (child.role == 'Autodesk.CloudPlatform.PropertyDatabase' &&
-                    child.type == 'resource') {
+                if (child.role == 'Autodesk.CloudPlatform.PropertyDatabase') {
                     sqLiteUrn = child.urn;
                 }
-                if (child.role == 'Autodesk.AEC.ModelData' &&
-                    child.type == 'resource') {
+                if (child.role == 'Autodesk.AEC.ModelData') {
                     propertiesUrn = child.urn;
                 }
             }
@@ -129,7 +132,16 @@ function parseManifest(manifest) {
     } catch (err) {
         return err;
     }
+
+    
+    function derivativeIsOk(derivative) {
+        return derivative.outputType?.includes('svf') &&
+            derivative.progress == 'complete' &&
+            derivative.status == 'success' &&
+            derivative.children;
+    }
 }
+
 
 
 function createResultDirectory(cadFileName) {
@@ -139,7 +151,7 @@ function createResultDirectory(cadFileName) {
         return Error('Could not create base results directory.');
     }
 
-    const resultDir = path.join(resultDir, cadFileName);
+    const resultDir = path.join(baseResultDir, cadFileName);
     if (!createDirectory(resultDir)) {
         return Error('Could not create results directory.');
     }

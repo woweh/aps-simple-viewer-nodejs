@@ -33,9 +33,9 @@ async function setupModelUpload(viewer) {
     const upload = document.getElementById('upload');
     const input = document.getElementById('input');
     const models = document.getElementById('models');
-    const download = document.getElementById('download');
 
     upload.onclick = () => input.click();
+
     input.onchange = async () => {
         const file = input.files[0];
         let data = new FormData();
@@ -47,7 +47,6 @@ async function setupModelUpload(viewer) {
 
         upload.setAttribute('disabled', 'true');
         models.setAttribute('disabled', 'true');
-        download.setAttribute('disabled', 'true');
         showNotification(`Uploading model <em>${file.name}</em>. Do not reload the page.`);
 
         try {
@@ -68,11 +67,11 @@ async function setupModelUpload(viewer) {
             clearNotification();
             upload.removeAttribute('disabled');
             models.removeAttribute('disabled');
-            download.removeAttribute('disabled');
             input.value = '';
         }
     };
 }
+
 
 async function onModelSelected(viewer, urn) {
     console.log(`Selected model ${urn}`);
@@ -81,6 +80,8 @@ async function onModelSelected(viewer, urn) {
         delete window.onModelSelectedTimeout;
     }
     window.location.hash = urn;
+    const download = document.getElementById('download');
+    download.setAttribute('disabled', 'true');
     try {
         const resp = await fetch(`/api/models/${urn}/status`);
         if (!resp.ok) {
@@ -101,11 +102,26 @@ async function onModelSelected(viewer, urn) {
             default:
                 clearNotification();
                 loadModel(viewer, urn);
+                download.removeAttribute('disabled');
+                tryDownloadProperties(urn);
                 break;
         }
-    } catch (err) {
+} catch (err) {
         alert('Could not load model. See the console for more details.');
         console.error(err);
+    }
+}
+
+async function tryDownloadProperties(url) {
+    try {
+        console.log(`Trying to download model properties for ${url}`);
+        const resp = await fetch(`/api/models/${url}/properties`);
+        if (!resp.ok) {
+            throw new Error(await resp.text());
+        }
+    } catch (error) {
+        alert('Could not download the model properties. See the console for more details.');
+        console.error(error);
     }
 }
 
