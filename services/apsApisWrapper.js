@@ -1,3 +1,6 @@
+/**
+ * Wrapper for APS APIs (Autodesk Platform Services, formerly Forge).
+ */
 const fs = require("fs");
 const APS = require("forge-apis");
 const {
@@ -55,7 +58,7 @@ service.getPublicToken = async () => {
 /**
  * Check if a bucket exists.
  * @param {string} bucketKey
- * @returns
+ * @returns {Promise<boolean>} True if the bucket exists, false otherwise.
  */
 service.bucketExists = async (bucketKey) => {
     console.log("");
@@ -78,7 +81,7 @@ service.bucketExists = async (bucketKey) => {
 
 /**
  * Ensure a bucket exists, creating it if necessary.
- * @param {string} bucketKey
+ * @param {string} bucketKey The bucket key.
  */
 service.ensureBucketExists = async (bucketKey) => {
     console.log("");
@@ -108,7 +111,7 @@ service.ensureBucketExists = async (bucketKey) => {
 
 /**
  * List all objects in the APS_BUCKET.
- * @returns {Promise<APS.BucketsApi.Buckets>}
+ * @returns {Promise<APS.BucketsApi.Buckets>} List of objects.
  */
 service.listObjects = async () => {
     console.log("");
@@ -152,7 +155,7 @@ service.listObjects = async () => {
  * Upload a file to the APS_BUCKET.
  * @param {string} objectName
  * @param {string} filePath
- * @returns
+ * @returns {Promise<APS.ObjectsApi.ObjectFullDetails>} The uploaded object.
  */
 service.uploadObject = async (objectName, filePath) => {
     console.log("");
@@ -176,9 +179,9 @@ service.uploadObject = async (objectName, filePath) => {
 
 /**
  * Start a translation job.
- * @param {string} urn
- * @param {string} rootFilename
- * @returns
+ * @param {string} urn The urn of the uploaded CAD file in the bucket (urnified objectID).
+ * @param {string} rootFilename The root (= original) filename of the CAD file.
+ * @returns {Promise<APS.DerivativesApi.Job>} The translation job.
  */
 service.translateObject = async (urn, rootFilename) => {
     console.log("");
@@ -204,12 +207,12 @@ service.translateObject = async (urn, rootFilename) => {
 
 /**
  * Get the manifest (> status and results) of a translation job.
- * @param {string} urn
- * @returns
+ * @param {string} urn The urn of the viewable
+ * @returns {Promise<APS.DerivativesApi.Manifest>} The manifest.
  */
 service.getManifest = async (urn) => {
     console.log("");
-    console.log(`Getting manifest for ${urn}`);
+    console.log(`Getting manifest for "${urn}"`);
     try {
         const resp = await new APS.DerivativesApi().getManifest(
             urn,
@@ -228,31 +231,15 @@ service.getManifest = async (urn) => {
     }
 };
 
-service.getDerivativeUrn = async (urn, derivativeUrn) => {
+/**
+ * Gets the signed dowload urn and cookie value for dowloading a derivative.
+ * @param {String} urn The urn of the viewable
+ * @param {String} derivativeUrn The urn of the derivative (extracted from the manifest)
+ * @returns {Promise<{data: APS.DerivativesApi.Derivative, cookieValue: string}>} The signed download urn and cookie value.
+ */
+service.getDerivativeDownloadUrn = async (urn, derivativeUrn) => {
     console.log();
-    console.log(`Downloading ${derivativeUrn} from ${urn}`);
-    try {
-        const resp = await new APS.DerivativesApi().getDerivativeDownloadUrl(
-            urn,
-            derivativeUrn,
-            {},
-            null,
-            await service.getInternalToken()
-        );
-        return resp.body;
-    } catch (err) {
-        console.log("err: ", err);
-        if (err.response.status === 404) {
-            return null;
-        } else {
-            throw err;
-        }
-    }
-}
-
-service.downloadDerivative = async (urn, derivativeUrn, filePath) => {
-    console.log();
-    console.log(`Downloading ${derivativeUrn} from ${urn}`);
+    console.log(`Getting download urn for derivative "${derivativeUrn}" and urn "${urn}"`);
 
     const resp = await new APS.DerivativesApi().getDerivativeDownloadUrl(
         urn,
@@ -262,23 +249,19 @@ service.downloadDerivative = async (urn, derivativeUrn, filePath) => {
         await service.getInternalToken()
     );
 
-    const url = new URL(resp.body.url);
-    console.log("url: ", url);
+    const data = resp.body;
+    console.log("Response data: ", data);
 
-    const cookieValue = resp.body.headers.all().filter(header => { return header.key === 'Set-Cookie'; }).map(function (header) { return header.value; }).join(';');
+    const cookieValue = resp.headers['set-cookie'].join(';');
     console.log("cookieValue: ", cookieValue);
 
-    console.log('Saving as file: ', filePath);
-
-    // TODO:
-    // - download the file from the given url
-    // - set the cookieValue for the "Cookie" header
-    // - save the file to filePath
-    // - return true if all worked fine, false otherwise
-    
-
-
-    return true;
+    return { data, cookieValue };
 };
 
+
+/**
+ * Base64 encodes the given "Object ID" string to create a "urn" that is used when creating the translation job.
+ * @param {String} id The Autodesk "Object ID" of CAD file in the bucket.
+ * @returns {String} The urnified object ID.
+ */
 service.urnify = (id) => Buffer.from(id).toString("base64").replace(/=/g, "");

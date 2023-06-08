@@ -1,8 +1,10 @@
 const express = require('express');
 const formidable = require('express-formidable');
-const { listObjects, uploadObject, translateObject, getManifest, getDerivativeUrn, downloadDerivative, urnify } = require('../services/apsApisWrapper.js');
+const { listObjects, uploadObject, translateObject, getManifest, getDerivativeDownloadUrn, urnify } = require('../services/apsApisWrapper.js');
 const path = require('path');
 const fs = require('fs');
+
+
 
 let router = express.Router();
 
@@ -48,11 +50,6 @@ router.get(`${modelsEndpoint}/:urn/status`, async function (req, res, next) {
                     }
                 }
             }
-            let parsedManifest = parseManifest(manifest);
-            if (parsedManifest?.propertiesUrn) {
-                const derivativeUrn = await getDerivativeUrn(req.params.urn, parsedManifest.propertiesUrn);
-                console.log("Derivative urn: ", derivativeUrn);
-            }
             res.json({ status: manifest.status, progress: manifest.progress, messages });
         } else {
             res.json({ status: 'n/a' });
@@ -69,7 +66,8 @@ router.get(`${modelsEndpoint}/:urn/status`, async function (req, res, next) {
  */
 router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) {
     console.log("")
-    console.log('GET / download properties for urn: ', req.params.urn);
+    console.log('Download properties for urn: ', req.params.urn);
+    console.log('TODO: Save properties to files.')
 
     try {
         const manifest = await getManifest(req.params.urn);
@@ -80,20 +78,22 @@ router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) 
             return;
         }
 
-        const resultDir = createResultDirectory(parseManifest.cadFileName);
+        const resultDir = createResultDirectory(parsedManifest.cadFileName);
         if (resultDir instanceof Error) {
             next(resultDir);
             return;
         }
 
-        const sqLitePath = path.join(resultDir, 'properties.sqlite');
-        const propertiesPath = path.join(resultDir, 'properties.json');
+        // const sqLitePath = path.join(resultDir, 'properties.sqlite');
+        // const propertiesPath = path.join(resultDir, 'properties.json');
 
-        let worked = await downloadDerivative(req.params.urn, parsedManifest.sqLiteUrn, sqLitePath);
-        console.log("worked: ", worked);
+        const sqLiteUrnData = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.sqLiteUrn);
+        console.log(sqLiteUrnData);
 
-        worked = worked && await downloadDerivative(req.params.urn, parsedManifest.propertiesUrn, propertiesPath);
-        console.log("worked: ", worked);
+        const propertiesUrnData = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.propertiesUrn);
+        console.log(propertiesUrnData);
+
+        // TODO: download the files
 
     } catch (err) {
         console.log(err);
@@ -102,6 +102,11 @@ router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) 
 });
 
 
+/**
+ * Parses the manifest object and extracts the CAD file name, SQLite URN and Properties URN.
+ * @param {Object} manifest - The manifest object to parse.
+ * @returns {Object|Error} - An object containing the CAD file name, SQLite URN and Properties URN or an Error if the manifest could not be parsed.
+ */
 function parseManifest(manifest) {
     try {
         let cadFileName = '';
@@ -133,7 +138,7 @@ function parseManifest(manifest) {
         return err;
     }
 
-    
+
     function derivativeIsOk(derivative) {
         return derivative.outputType?.includes('svf') &&
             derivative.progress == 'complete' &&
@@ -143,15 +148,23 @@ function parseManifest(manifest) {
 }
 
 
-
+/**
+ * Creates a directory to store the results of a model translation.
+ * @param {string} cadFileName - The name of the CAD file to create the directory for.
+ * @returns {string|Error} - The path of the created directory or an Error if the directory could not be created.
+ */
 function createResultDirectory(cadFileName) {
+
+    if (!cadFileName) {
+        return Error('No CAD file name provided.');
+    }
 
     const baseResultDir = path.join(__dirname, '..', 'results');
     if (!createDirectory(baseResultDir)) {
         return Error('Could not create base results directory.');
     }
 
-    const resultDir = path.join(baseResultDir, cadFileName);
+    const resultDir = path.join(baseResultDir, path.basename(cadFileName));
     if (!createDirectory(resultDir)) {
         return Error('Could not create results directory.');
     }
@@ -193,5 +206,6 @@ router.post(modelsEndpoint, formidable(), async function (req, res, next) {
         next(err);
     }
 });
+
 
 module.exports = router;
