@@ -1,0 +1,12 @@
+GitHub
+coverage
+docs
+node_modules
+
+.gitignore
+.idea
+.vscode
+.env
+
+*.json
+*.md
