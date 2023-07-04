@@ -5,7 +5,19 @@ initViewer(document.getElementById('preview')).then(viewer => {
     const urn = window.location.hash?.substring(1);
     setupModelSelection(viewer, urn);
     setupModelUpload(viewer);
+    setupPropertiesDownload();
 });
+
+async function setupPropertiesDownload() {
+    const downloadButton = document.getElementById('download');
+    downloadButton.addEventListener('click', async () => {
+        try {
+           tryDownloadProperties();
+        } catch (error) {
+            console.error(error);
+        }
+    });
+}
 
 async function setupModelSelection(viewer, selectedUrn) {
     console.log('Setting up model selection');
@@ -103,21 +115,26 @@ async function onModelSelected(viewer, urn) {
                 clearNotification();
                 loadModel(viewer, urn);
                 download.removeAttribute('disabled');
-                tryDownloadProperties(urn);
                 break;
         }
-} catch (err) {
+    } catch (err) {
         alert('Could not load model. See the console for more details.');
         console.error(err);
     }
 }
 
-async function tryDownloadProperties(url) {
+async function tryDownloadProperties() {
     try {
-        console.log(`Trying to download model properties for ${url}`);
-        const resp = await fetch(`/api/models/${url}/properties`);
+        const urn = window.location.hash?.substring(1);        
+        if (!urn) {
+            console.error('No model selected');
+        }
+        console.log(`Trying to download model properties for ${urn}`);
+        const resp = await fetch(`/api/models/${urn}/properties`);
         if (!resp.ok) {
-            throw new Error(await resp.text());
+            const errorMessage = await resp.text();
+            alert(errorMessage);
+            console.error(errorMessage);
         }
     } catch (error) {
         alert('Could not download the model properties. See the console for more details.');

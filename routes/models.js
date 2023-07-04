@@ -1,3 +1,4 @@
+const https = require('https');
 const express = require('express');
 const formidable = require('express-formidable');
 const { listObjects, uploadObject, translateObject, getManifest, getDerivativeDownloadUrn, urnify } = require('../services/apsApisWrapper.js');
@@ -67,7 +68,6 @@ router.get(`${modelsEndpoint}/:urn/status`, async function (req, res, next) {
 router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) {
     console.log("")
     console.log('Download properties for urn: ', req.params.urn);
-    console.log('TODO: Save properties to files.')
 
     try {
         const manifest = await getManifest(req.params.urn);
@@ -78,22 +78,26 @@ router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) 
             return;
         }
 
-        const resultDir = createResultDirectory(parsedManifest.cadFileName);
+        const resultDir = createResultDirectory(parsedManifest.outputType);
         if (resultDir instanceof Error) {
             next(resultDir);
             return;
         }
+        const manifestFilePath = path.join(resultDir, parsedManifest.cadFileName + `.manifest.json`);
+        fs.writeFileSync(manifestFilePath, JSON.stringify(manifest, null, 4))
 
-        // const sqLitePath = path.join(resultDir, 'properties.sqlite');
-        // const propertiesPath = path.join(resultDir, 'properties.json');
+        const sqLiteFilePath = path.join(resultDir, parsedManifest.cadFileName + `.properties.sqlite`);
+        const sqLiteDownloadInfo = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.sqLiteUrn);
+        console.log(sqLiteDownloadInfo);
+        tryDownloadDerivative(sqLiteDownloadInfo, sqLiteFilePath)
 
-        const sqLiteUrnData = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.sqLiteUrn);
-        console.log(sqLiteUrnData);
+        if (parsedManifest.propertiesUrn != '') {
+            const jsonFilePath = path.join(resultDir, parsedManifest.cadFileName + `.properties.json`);
+            const jsonDownloadInfo = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.propertiesUrn);
+            tryDownloadDerivative(jsonDownloadInfo, jsonFilePath)
+        }
 
-        const propertiesUrnData = await getDerivativeDownloadUrn(req.params.urn, parsedManifest.propertiesUrn);
-        console.log(propertiesUrnData);
-
-        // TODO: download the files
+        res.json({ status: 'ok' });
 
     } catch (err) {
         console.log(err);
@@ -102,8 +106,59 @@ router.get(`${modelsEndpoint}/:urn/properties`, async function (req, res, next) 
 });
 
 
+async function tryDownloadDerivative(di, filePath) {
+
+    console.log('Try downloading derivative...');
+    if (!di || !di.data || !di.data.url || !di.cookieValue) {
+        // log error and return
+        console.error('Oops, no valid download info provided.');
+        return;
+    }
+    console.log('- URL: ', di.data.url);
+    console.log('- File: ', filePath);
+
+    if (fs.existsSync(filePath)) {
+        // delete file
+        fs.unlinkSync(filePath);
+    }
+    if (fs.existsSync(filePath)) {
+        console.error('Could not delete and thus download the file: ', filePath);
+    }
+
+    try {
+        await downloadFile(di, filePath);
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+async function downloadFile(di, fileName) {
+    const options = {
+        headers: {
+            Cookie: di.cookieValue,
+            'Content-Type': di.data['content-type']
+        }
+    };
+    const file = fs.createWriteStream(fileName);
+    return new Promise((resolve, reject) => {
+        https.get(di.data.url, options, (response) => {
+            response.pipe(file);
+            file.on('finish', () => {
+                file.close();
+                console.log(`File downloaded to ${fileName}`);
+                resolve();
+            });
+        }).on('error', (error) => {
+            fs.unlink(fileName, () => {
+                reject(error);
+            });
+        });
+    });
+}
+
+
 /**
- * Parses the manifest object and extracts the CAD file name, SQLite URN and Properties URN.
+ * Parses the manifest object and extracts the CAD file name, outputType, SQLite URN and Properties URN.
  * @param {Object} manifest - The manifest object to parse.
  * @returns {Object|Error} - An object containing the CAD file name, SQLite URN and Properties URN or an Error if the manifest could not be parsed.
  */
@@ -112,6 +167,7 @@ function parseManifest(manifest) {
         let cadFileName = '';
         let sqLiteUrn = '';
         let propertiesUrn = '';
+        let outputType = '';
 
         if (!manifest) {
             return Error('no manifest received');
@@ -123,6 +179,7 @@ function parseManifest(manifest) {
             if (!derivativeIsOk(derivative)) {
                 continue;
             }
+            outputType = derivative.outputType;
             cadFileName = derivative.name;
             for (const child of derivative.children) {
                 if (child.role == 'Autodesk.CloudPlatform.PropertyDatabase') {
@@ -133,7 +190,7 @@ function parseManifest(manifest) {
                 }
             }
         }
-        return { cadFileName, sqLiteUrn, propertiesUrn };
+        return { cadFileName, outputType, sqLiteUrn, propertiesUrn };
     } catch (err) {
         return err;
     }

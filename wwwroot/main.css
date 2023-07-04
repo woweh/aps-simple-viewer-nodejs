@@ -1,11 +1,14 @@
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     height: 100vh;
     font-family: ArtifaktElement;
 }
 
-#header, #preview, #overlay {
+#header,
+#preview,
+#overlay {
     position: absolute;
     width: 100%;
 }
@@ -18,7 +21,8 @@ body, html {
     align-items: center;
 }
 
-#preview, #overlay {
+#preview,
+#overlay {
     top: 3em;
     bottom: 0;
 }
@@ -30,14 +34,14 @@ body, html {
     display: none;
 }
 
-#overlay > .notification {
+#overlay>.notification {
     margin: auto;
     padding: 1em;
     max-width: 50%;
     background: white;
 }
 
-#header > * {
+#header>* {
     height: 2em;
     margin: 0 0.5em;
     font-size: 1em;

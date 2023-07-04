@@ -188,7 +188,7 @@ service.translateObject = async (urn, rootFilename) => {
     console.log(`Starting translation for ${urn}`);
     const job = {
         input: { urn },
-        output: { formats: [{ type: "svf2", views: ["2d", "3d"] }] },
+        output: { formats: [{ type: "svf", views: ["2d", "3d"] }] },
     };
     if (rootFilename) {
         job.input.compressedUrn = true;

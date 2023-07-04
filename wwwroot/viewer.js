@@ -22,7 +22,8 @@ export function initViewer(container) {
             };
             const viewer = new Autodesk.Viewing.GuiViewer3D(container, config);
             viewer.start();
-            viewer.setTheme('light-theme');
+            viewer.setTheme('dark-theme');
+            viewer.setSelectionMode(Autodesk.Viewing.SelectionMode.LAST_OBJECT);
             resolve(viewer);
         });
     });
